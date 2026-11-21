@@ -336,7 +336,7 @@ function QRStudio() {
       </div>
     </div>
     {active&&qr&&<div className="label" style={{width:size+'mm',minHeight:size+'mm'}}>
-      <img src={qr} alt="QR"/><div>{active.name}</div><div>{active.invNo || active.id.slice(0,8)}</div>
+      <img src={qr} alt="QR"/><div>{active.name}</div><div>{active.id.slice(0,8)}</div>
     </div>}
   </>;
 }
