@@ -12,7 +12,7 @@ const menu = [
   { to: '/', icon: '⌂', title: 'Главная' },
   { to: '/catalog', icon: '⚒', title: 'Инструменты' },
   { to: '/warehouse', icon: '▣', title: 'Расходники / Склад' },
-  { to: '/scan', icon: '▦', title: 'QR-коды' },
+  { to: '/qr', icon: '▦', title: 'QR-коды' },
   { to: '/places', icon: '⌖', title: 'Места хранения' },
   { to: '/history', icon: '◷', title: 'История изменений' },
   { to: '/reports', icon: '▥', title: 'Отчёты и статистика' },
@@ -52,6 +52,7 @@ export default function App() {
         <Route path="/i/:id" element={<Card />} />
         <Route path="/edit/:id" element={<Form />} />
         <Route path="/scan" element={<Scan />} />
+        <Route path="/qr" element={<QRStudio />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Missing />} />
       </Routes>
@@ -107,7 +108,7 @@ function Home() {
         <div className="action-grid">
           <Link className="action primary-action" to="/new"><span>＋</span>Добавить предмет</Link>
           <Link className="action" to="/warehouse"><span>▣</span>Расходники</Link>
-          <Link className="action" to="/scan"><span>▦</span>Сканировать QR</Link>
+          <Link className="action" to="/qr"><span>▦</span>Создать QR-код</Link>
           <Link className="action" to="/catalog"><span>⚒</span>Каталог</Link>
           <Link className="action" to="/places"><span>⌖</span>Места хранения</Link>
           <Link className="action" to="/settings"><span>⇩</span>Резервная копия</Link>
@@ -268,6 +269,81 @@ function Card() {
     <Link className="btn pri" to={`/edit/${it.id}`}>Редактировать</Link><button className="dng" onClick={del}>Удалить</button>
     {big && <div onClick={() => setBig('')} style={{ position: 'fixed', inset: 0, background: '#000d', zIndex: 8, display: 'grid', placeItems: 'center' }}><img src={big} style={{ maxWidth: '95%', maxHeight: '95%' }} alt="" /></div>}
   </>);
+}
+
+function QRStudio() {
+  const items = live();
+  const [selectedId, setSelectedId] = useState('');
+  const [search, setSearch] = useState('');
+  const [size, setSize] = useState(40);
+  const [qr, setQr] = useState('');
+  const [error, setError] = useState('');
+  const active = items?.find(i => i.id === selectedId);
+  useEffect(() => {
+    let cancelled = false;
+    setQr('');
+    setError('');
+    if (!selectedId || !active) return;
+    QRCode.toDataURL(itemUrl(selectedId), { width: 768, margin: 3, errorCorrectionLevel: 'M' })
+      .then(value => { if (!cancelled) setQr(value); })
+      .catch(() => { if (!cancelled) setError('Не удалось создать QR-код'); });
+    return () => { cancelled = true; };
+  }, [selectedId, active?.id]);
+  const filtered = [...(items || [])].filter(i =>
+    [i.name, i.maker, i.model, i.invNo, i.place].some(v => (v || '').toLowerCase().includes(search.toLowerCase()))
+  ).sort((a,b) => a.name.localeCompare(b.name,'ru'));
+  const print = () => {
+    if (!qr || !active) return;
+    window.print();
+  };
+  return <>
+    <div className="page-head">
+      <div><h1>Создать QR-код</h1><p className="mut">Выберите предмет, скачайте код или распечатайте наклейку.</p></div>
+      <Link className="btn" to="/scan">▦ Сканировать QR</Link>
+    </div>
+    <div className="qr-layout">
+      <div className="panel">
+        <SectionHead title="1. Выбор предмета"/>
+        <div className="panel-body">
+          <label htmlFor="qr-search">Найти инструмент или расходник</label>
+          <input id="qr-search" placeholder="Название, модель, инвентарный номер…" value={search} onChange={e=>setSearch(e.target.value)} />
+          <div className="qr-item-list">
+            {filtered.map(i=><button key={i.id} type="button" className={'qr-item-choice'+(i.id===selectedId?' selected':'')} onClick={()=>setSelectedId(i.id)}>
+              {i.photos[0]?<img src={i.photos[0]} alt="" />:<span className="qr-placeholder">⚒</span>}
+              <span><strong>{i.name}</strong><small>{i.category}{i.invNo?' · № '+i.invNo:''}</small></span><span aria-hidden="true">{i.id===selectedId?'●':'○'}</span>
+            </button>)}
+            {!filtered.length&&<p className="mut">Предметы не найдены. Сначала создайте карточку.</p>}
+          </div>
+          <Link className="btn pri" to="/new">＋ Добавить новый предмет</Link>
+        </div>
+      </div>
+      <div className="panel">
+        <SectionHead title="2. QR-наклейка"/>
+        <div className="panel-body">
+          {active ? <>
+            <div className="qr-preview">
+              {qr?<img src={qr} alt={'QR-код: '+active.name}/>:<p className="mut">{error||'Создание QR-кода…'}</p>}
+              <strong>{active.name}</strong>
+              <small>№ {active.invNo || active.id.slice(0,8)}</small>
+            </div>
+            <p className="mut qr-tip">QR ведёт к постоянной карточке предмета. Если открыть его на другом устройстве, данные карточки должны быть предварительно перенесены туда через резервную копию.</p>
+            <label htmlFor="qr-size">Размер наклейки</label>
+            <select id="qr-size" value={size} onChange={e=>setSize(Number(e.target.value))}>
+              {[30,40,50,60].map(mm=><option value={mm} key={mm}>{mm} × {mm} мм</option>)}
+            </select>
+            <div className="qr-actions">
+              <a className={'btn pri'+(!qr?' disabled':'')} aria-disabled={!qr} href={qr||undefined} download={'workshop-qr-'+active.id.slice(0,8)+'.png'} onClick={e=>{if(!qr)e.preventDefault();}}>↓ Скачать PNG</a>
+              <button onClick={print} disabled={!qr}>▤ Печать наклейки</button>
+              <Link className="btn" to={'/i/'+active.id}>Открыть карточку</Link>
+            </div>
+          </>:<div className="qr-empty"><span>▦</span><p>Выберите инструмент или расходник слева, чтобы создать QR-код.</p></div>}
+        </div>
+      </div>
+    </div>
+    {active&&qr&&<div className="label" style={{width:size+'mm',minHeight:size+'mm'}}>
+      <img src={qr} alt="QR"/><div>{active.name}</div><div>{active.invNo || active.id.slice(0,8)}</div>
+    </div>}
+  </>;
 }
 
 function Scan() {
