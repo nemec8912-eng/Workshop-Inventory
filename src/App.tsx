@@ -40,8 +40,8 @@ function Home() {
     <input placeholder="Быстрый поиск…" value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && nav('/catalog?q=' + encodeURIComponent(q))} />
     <div className="grid">
       <div className="card"><div className="stat">{items.length}</div>Всего предметов</div>
-      <div className="card"><div className="stat">{n(i => i.category === 'Электроинструменты')}</div>Электроинструменты</div>
-      <div className="card"><div className="stat">{n(i => i.category === 'Станки и оборудование')}</div>Оборудование</div>
+      <div className="card"><div className="stat">{items.filter(i => i.category === 'Электроинструменты').length}</div>Электроинструменты</div>
+      <div className="card"><div className="stat">{items.filter(i => i.category === 'Станки и оборудование').length}</div>Оборудование</div>
     </div>
     <h2>Недавно добавлено</h2>
     {recent.length === 0 && <div className="card mut">Пока пусто. Нажмите «＋ Добавить», чтобы создать первую карточку.</div>}
