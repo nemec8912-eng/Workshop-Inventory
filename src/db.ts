@@ -1,7 +1,5 @@
 import Dexie, { Table } from 'dexie';
 
-export const STATUSES = ['В наличии', 'Неисправен', 'Списан'] as const;
-export type Status = (typeof STATUSES)[number];
 export const CATEGORIES = ['Электроинструменты', 'Ручные инструменты', 'Измерительные приборы', 'Станки и оборудование', 'Аккумуляторы', 'Зарядные устройства', 'Оснастка', 'Запчасти', 'Крепёж', 'Электротовары', 'Расходные материалы', 'Прочее'];
 
 export interface Item {
@@ -10,8 +8,6 @@ export interface Item {
   category: string;
   maker?: string; model?: string; serial?: string; invNo?: string;
   desc?: string; place?: string; notes?: string;
-  status: Status;
-  previousStatus?: string; // старый статус сохранён при миграции
   price?: number; currency?: string; bought?: string; shop?: string; warranty?: string;
   photos: string[]; // сжатые изображения (dataURL), первое — главное
   deleted?: boolean;
@@ -24,11 +20,17 @@ class WorkshopDB extends Dexie {
     super('workshop-inventory');
     this.version(1).stores({ items: 'id,name,category,status,updated' });
     this.version(2).stores({ items: 'id,name,category,status,updated' }).upgrade(async tx => {
-      await tx.table('items').toCollection().modify((item: Item) => {
-        if (item.status === ('Выдан' as Status) || item.status === ('В работе' as Status) || item.status === ('На ремонте' as Status)) {
+      await tx.table('items').toCollection().modify((item: Item & {status?:string;previousStatus?:string}) => {
+        if (item.status === 'Выдан' || item.status === 'В работе' || item.status === 'На ремонте') {
           item.previousStatus = item.status;
-          item.status = item.status === ('На ремонте' as Status) ? 'Неисправен' : 'В наличии';
+          item.status = item.status === 'На ремонте' ? 'Неисправен' : 'В наличии';
         }
+      });
+    });
+    this.version(3).stores({ items: 'id,name,category,updated' }).upgrade(async tx => {
+      await tx.table('items').toCollection().modify((item: Record<string, unknown>) => {
+        delete item.status;
+        delete item.previousStatus;
       });
     });
   }
@@ -36,7 +38,7 @@ class WorkshopDB extends Dexie {
 export const db = new WorkshopDB();
 
 export const newItem = (): Item => ({
-  id: crypto.randomUUID(), name: '', category: CATEGORIES[0], status: 'В наличии', currency: 'RUB',
+  id: crypto.randomUUID(), name: '', category: CATEGORIES[0], currency: 'RUB',
   photos: [], created: Date.now(), updated: Date.now()
 });
 
@@ -49,9 +51,8 @@ export function validateBackup(data: any): Item[] {
   if (data.version > BACKUP_VERSION) throw new Error('Копия создана более новой версией приложения');
   return data.items.map((i: any) => {
     if (typeof i?.id !== 'string' || typeof i?.name !== 'string') throw new Error('Повреждена запись в копии');
-    const legacy = ['Выдан', 'В работе', 'На ремонте'].includes(i.status);
-    return { ...newItem(), ...i, status: legacy ? (i.status === 'На ремонте' ? 'Неисправен' : 'В наличии') : i.status,
-      previousStatus: legacy ? i.status : i.previousStatus,
+    const { status: _status, previousStatus: _previousStatus, ...clean } = i;
+    return { ...newItem(), ...clean,
       photos: Array.isArray(i.photos) ? i.photos.filter((p: any) => typeof p === 'string' && p.startsWith('data:image/')) : [] } as Item;
   });
 }
