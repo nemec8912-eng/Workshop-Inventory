@@ -3,7 +3,7 @@ import { NavLink, Route, Routes, Link, useNavigate, useParams } from 'react-rout
 import { useLiveQuery } from 'dexie-react-hooks';
 import QRCode from 'qrcode';
 import { Html5Qrcode } from 'html5-qrcode';
-import { db, Item, STATUSES, CATEGORIES, newItem, resizeImage, itemUrl, parseQr, exportBackup, validateBackup, mergeItems } from './db';
+import { db, Item, CATEGORIES, newItem, resizeImage, itemUrl, parseQr, exportBackup, validateBackup, mergeItems } from './db';
 
 let toastSet: (s: string) => void = () => {};
 const toast = (s: string) => toastSet(s);
@@ -34,7 +34,6 @@ const live = () => useLiveQuery(() => db.items.filter(i => !i.deleted).toArray()
 function Home() {
   const items = live(); const [q, setQ] = useState(''); const nav = useNavigate();
   if (!items) return null;
-  const n = (f: (i: Item) => boolean) => items.filter(f).length;
   const recent = [...items].sort((a, b) => b.created - a.created).slice(0, 5);
   return (<>
     <h1>Мастерская</h1>
@@ -43,8 +42,6 @@ function Home() {
       <div className="card"><div className="stat">{items.length}</div>Всего предметов</div>
       <div className="card"><div className="stat">{n(i => i.category === 'Электроинструменты')}</div>Электроинструменты</div>
       <div className="card"><div className="stat">{n(i => i.category === 'Станки и оборудование')}</div>Оборудование</div>
-      <div className="card"><div className="stat">{n(i => i.status === 'В наличии')}</div>В наличии</div>
-      <div className="card"><div className="stat">{n(i => i.status === 'Неисправен')}</div>Неисправны</div>
     </div>
     <h2>Недавно добавлено</h2>
     {recent.length === 0 && <div className="card mut">Пока пусто. Нажмите «＋ Добавить», чтобы создать первую карточку.</div>}
@@ -56,16 +53,16 @@ function Row({ i }: { i: Item }) {
   return <Link to={`/i/${i.id}`} style={{ color: 'inherit', textDecoration: 'none' }}><div className="card row">
     {i.photos[0] ? <img src={i.photos[0]} alt="" /> : <div style={{ width: 64 }} />}
     <div><b>{i.name}</b><div className="mut">{[i.maker, i.model].filter(Boolean).join(' ')}</div>
-      <span className="tag">{i.category}</span> <span className="tag">{i.status}</span></div></div></Link>;
+      <span className="tag">{i.category}</span></div></div></Link>;
 }
 
 function Catalog() {
   const items = live();
   const [q, setQ] = useState(new URLSearchParams(location.hash.split('?')[1] || '').get('q') || '');
-  const [cat, setCat] = useState(''); const [st, setSt] = useState(''); const [sort, setSort] = useState('name'); const [tiles, setTiles] = useState(false);
+  const [cat, setCat] = useState(''); const [sort, setSort] = useState('name'); const [tiles, setTiles] = useState(false);
   if (!items) return null;
   const t = q.toLowerCase();
-  const list = items.filter(i => (!cat || i.category === cat) && (!st || i.status === st) &&
+  const list = items.filter(i => (!cat || i.category === cat) &&
     (!t || [i.name, i.maker, i.model, i.serial, i.invNo, i.category, i.place].some(v => v?.toLowerCase().includes(t))))
     .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name, 'ru') : b.updated - a.updated);
   return (<>
@@ -73,13 +70,12 @@ function Catalog() {
     <input placeholder="Поиск по названию, модели, номеру, месту…" value={q} onChange={e => setQ(e.target.value)} />
     <div className="row">
       <select value={cat} onChange={e => setCat(e.target.value)}><option value="">Все категории</option>{CATEGORIES.map(c => <option key={c}>{c}</option>)}</select>
-      <select value={st} onChange={e => setSt(e.target.value)}><option value="">Все статусы</option>{STATUSES.map(c => <option key={c}>{c}</option>)}</select>
       <select value={sort} onChange={e => setSort(e.target.value)}><option value="name">По названию</option><option value="upd">По дате изменения</option></select>
       <button onClick={() => setTiles(!tiles)} aria-label="Плитка или список">{tiles ? '☰' : '▦'}</button>
     </div>
     {list.length === 0 && <div className="card mut">Ничего не найдено.</div>}
     {tiles ? <div className="grid">{list.map(i => <Link key={i.id} to={`/i/${i.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>
-      <div className="card">{i.photos[0] ? <img className="thumb" src={i.photos[0]} alt="" /> : <div className="thumb" />}<b>{i.name}</b><div className="mut">{i.status}</div></div></Link>)}</div>
+      <div className="card">{i.photos[0] ? <img className="thumb" src={i.photos[0]} alt="" /> : <div className="thumb" />}<b>{i.name}</b></div></Link>)}</div>
       : list.map(i => <Row key={i.id} i={i} />)}
   </>);
 }
@@ -107,7 +103,6 @@ function Form() {
   return (<>
     <h1>{id ? 'Редактирование' : 'Новый предмет'}</h1>
     <label>Категория<select value={it.category} onChange={e => set('category', e.target.value)}>{CATEGORIES.map(c => <option key={c}>{c}</option>)}</select></label>
-    <label>Статус<select value={it.status} onChange={e => set('status', e.target.value)}>{STATUSES.map(c => <option key={c}>{c}</option>)}</select></label>
     {FIELDS.map(f => <label key={f.k}>{f.label}{f.area
       ? <textarea rows={3} value={(it[f.k] as string) ?? ''} onChange={e => set(f.k, e.target.value)} />
       : <input type={f.type} value={(it[f.k] as any) ?? ''} onChange={e => set(f.k, f.type === 'number' ? (e.target.value === '' ? undefined : +e.target.value) : e.target.value)} />}</label>)}
@@ -135,7 +130,6 @@ function Card() {
   return (<>
     <h1>{it.name}</h1>
     {it.deleted && <div className="card dng">Предмет удалён. <button onClick={() => upd({ deleted: false })}>Восстановить</button></div>}
-    <label>Статус<select value={it.status} onChange={e => upd({ status: e.target.value as any })}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></label>
     <div className="grid">{it.photos.map((p, n) => <img key={n} className="thumb" src={p} alt="" onClick={() => setBig(p)} />)}</div>
     <div className="card">{rows.filter(r => r[1]).map(([k, v]) => <div key={k}><span className="mut">{k}: </span>{v}</div>)}</div>
     <div className="card"><h3>QR-код</h3>
