@@ -43,8 +43,8 @@ function Home() {
       <div className="card"><div className="stat">{items.length}</div>Всего предметов</div>
       <div className="card"><div className="stat">{n(i => i.category === 'Электроинструменты')}</div>Электроинструменты</div>
       <div className="card"><div className="stat">{n(i => i.category === 'Станки и оборудование')}</div>Оборудование</div>
-      <div className="card"><div className="stat">{n(i => i.status === 'На ремонте')}</div>На ремонте</div>
-      <div className="card"><div className="stat">{n(i => i.status === 'Выдан')}</div>Выдано</div>
+      <div className="card"><div className="stat">{n(i => i.status === 'В наличии')}</div>В наличии</div>
+      <div className="card"><div className="stat">{n(i => i.status === 'Неисправен')}</div>Неисправны</div>
     </div>
     <h2>Недавно добавлено</h2>
     {recent.length === 0 && <div className="card mut">Пока пусто. Нажмите «＋ Добавить», чтобы создать первую карточку.</div>}
