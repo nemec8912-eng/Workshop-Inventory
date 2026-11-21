@@ -188,7 +188,7 @@ function Catalog() {
   if (!items) return null;
   const t = q.toLowerCase();
   const list = items.filter(i => (!cat || i.category === cat) &&
-    (!t || [i.name, i.maker, i.model, i.serial, i.invNo, i.category, i.place].some(v => v?.toLowerCase().includes(t))))
+    (!t || [i.name, i.maker, i.model, i.category, i.place].some(v => v?.toLowerCase().includes(t))))
     .sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name, 'ru') : b.updated - a.updated);
   return (<>
     <h1>Каталог</h1>
@@ -206,7 +206,7 @@ function Catalog() {
 }
 
 const F = (k: keyof Item, label: string, o: { type?: string; area?: boolean } = {}) => ({ k, label, ...o });
-const FIELDS = [F('name', 'Название *'), F('maker', 'Производитель'), F('model', 'Модель'), F('serial', 'Серийный номер'), F('invNo', 'Инвентарный номер'),
+const FIELDS = [F('name', 'Название *'), F('maker', 'Производитель'), F('model', 'Модель'),
   F('place', 'Место хранения (например: Мастерская → Стеллаж 2 → Полка 3)'), F('notes', 'Примечания', { area: true })];
 
 function Form() {
@@ -248,7 +248,7 @@ function Card() {
   if (!it) return <Missing />;
   const upd = (p: Partial<Item>) => db.items.update(it.id, { ...p, updated: Date.now() });
   const del = async () => { if (confirm('Удалить предмет? Его можно будет восстановить в настройках.')) { await upd({ deleted: true }); toast('Удалено'); nav('/catalog'); } };
-  const rows: [string, any][] = [['Категория', it.category], ['Производитель', it.maker], ['Модель', it.model], ['Серийный номер', it.serial], ['Инв. номер', it.invNo],
+  const rows: [string, any][] = [['Категория', it.category], ['Производитель', it.maker], ['Модель', it.model],
     ['Место', it.place], ['Примечания', it.notes], ['Добавлено', new Date(it.created).toLocaleString('ru')], ['Изменено', new Date(it.updated).toLocaleString('ru')]];
   return (<>
     <h1>{it.name}</h1>
@@ -285,7 +285,7 @@ function QRStudio() {
     return () => { cancelled = true; };
   }, [selectedId, active?.id]);
   const filtered = [...(items || [])].filter(i =>
-    [i.name, i.maker, i.model, i.invNo, i.place].some(v => (v || '').toLowerCase().includes(search.toLowerCase()))
+    [i.name, i.maker, i.model, i.place].some(v => (v || '').toLowerCase().includes(search.toLowerCase()))
   ).sort((a,b) => a.name.localeCompare(b.name,'ru'));
   const print = () => {
     if (!qr || !active) return;
@@ -301,11 +301,11 @@ function QRStudio() {
         <SectionHead title="1. Выбор предмета"/>
         <div className="panel-body">
           <label htmlFor="qr-search">Найти инструмент или расходник</label>
-          <input id="qr-search" placeholder="Название, модель, инвентарный номер…" value={search} onChange={e=>setSearch(e.target.value)} />
+          <input id="qr-search" placeholder="Название, модель или место хранения…" value={search} onChange={e=>setSearch(e.target.value)} />
           <div className="qr-item-list">
             {filtered.map(i=><button key={i.id} type="button" className={'qr-item-choice'+(i.id===selectedId?' selected':'')} onClick={()=>setSelectedId(i.id)}>
               {i.photos[0]?<img src={i.photos[0]} alt="" />:<span className="qr-placeholder">⚒</span>}
-              <span><strong>{i.name}</strong><small>{i.category}{i.invNo?' · № '+i.invNo:''}</small></span><span aria-hidden="true">{i.id===selectedId?'●':'○'}</span>
+              <span><strong>{i.name}</strong><small>{i.category}</small></span><span aria-hidden="true">{i.id===selectedId?'●':'○'}</span>
             </button>)}
             {!filtered.length&&<p className="mut">Предметы не найдены. Сначала создайте карточку.</p>}
           </div>
@@ -319,7 +319,7 @@ function QRStudio() {
             <div className="qr-preview">
               {qr?<img src={qr} alt={'QR-код: '+active.name}/>:<p className="mut">{error||'Создание QR-кода…'}</p>}
               <strong>{active.name}</strong>
-              <small>№ {active.invNo || active.id.slice(0,8)}</small>
+              <small>№ {active.id.slice(0,8)}</small>
             </div>
             <p className="mut qr-tip">QR ведёт к постоянной карточке предмета. Если открыть его на другом устройстве, данные карточки должны быть предварительно перенесены туда через резервную копию.</p>
             <label htmlFor="qr-size">Размер наклейки</label>
