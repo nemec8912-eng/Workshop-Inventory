@@ -64,7 +64,6 @@ export default function App() {
 const live = () => useLiveQuery(() => db.items.filter(i => !i.deleted).toArray(), [], undefined as Item[] | undefined);
 
 const consumableCategories = new Set(['Расходные материалы', 'Крепёж', 'Запчасти', 'Электротовары', 'Оснастка']);
-const money = (amount: number) => amount.toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
 const displayDate = (time: number) => new Date(time).toLocaleDateString('ru-RU', {day:'2-digit',month:'short',year:'numeric'});
 const categoryList = (items: Item[]) => CATEGORIES.map(name => ({ name, count: items.filter(i => i.category === name).length })).filter(x => x.count > 0).sort((a,b) => b.count - a.count);
 
@@ -79,7 +78,6 @@ function Home() {
   if (!items) return <div className="panel">Загрузка данных…</div>;
   const tools = items.filter(i => !consumableCategories.has(i.category));
   const consumables = items.filter(i => consumableCategories.has(i.category));
-  const totalCost = items.reduce((sum,i) => sum + (i.currency === 'RUB' || !i.currency ? (i.price || 0) : 0), 0);
   const placesCount = new Set(items.map(i => i.place?.trim()).filter(Boolean)).size;
   const recent = [...items].sort((a,b) => b.updated - a.updated).slice(0,5);
   const categories = categoryList(items).slice(0,6);
@@ -93,7 +91,6 @@ function Home() {
       <Link className="kpi" to="/catalog"><span className="kpi-icon blue">⚒</span><span>Всего инструментов<strong>{tools.length}</strong></span></Link>
       <Link className="kpi" to="/warehouse"><span className="kpi-icon gold">▣</span><span>Позиций расходников<strong>{consumables.length}</strong></span></Link>
       <Link className="kpi" to="/places"><span className="kpi-icon green">⌖</span><span>Мест хранения<strong>{placesCount}</strong></span></Link>
-      <div className="kpi"><span className="kpi-icon violet">₽</span><span>Учтённая стоимость<strong>{money(totalCost)}</strong></span></div>
       <Link className="kpi" to="/reports"><span className="kpi-icon blue">▥</span><span>Всего позиций<strong>{items.length}</strong></span></Link>
     </section>
     <section className="dashboard-middle">
@@ -210,8 +207,7 @@ function Catalog() {
 
 const F = (k: keyof Item, label: string, o: { type?: string; area?: boolean } = {}) => ({ k, label, ...o });
 const FIELDS = [F('name', 'Название *'), F('maker', 'Производитель'), F('model', 'Модель'), F('serial', 'Серийный номер'), F('invNo', 'Инвентарный номер'),
-  F('place', 'Место хранения (например: Мастерская → Стеллаж 2 → Полка 3)'), F('price', 'Цена покупки', { type: 'number' }), F('bought', 'Дата покупки', { type: 'date' }),
-  F('shop', 'Магазин / поставщик'), F('warranty', 'Гарантия до', { type: 'date' }), F('desc', 'Описание', { area: true }), F('notes', 'Примечания', { area: true })];
+  F('place', 'Место хранения (например: Мастерская → Стеллаж 2 → Полка 3)'), F('notes', 'Примечания', { area: true })];
 
 function Form() {
   const { id } = useParams(); const nav = useNavigate();
@@ -253,8 +249,7 @@ function Card() {
   const upd = (p: Partial<Item>) => db.items.update(it.id, { ...p, updated: Date.now() });
   const del = async () => { if (confirm('Удалить предмет? Его можно будет восстановить в настройках.')) { await upd({ deleted: true }); toast('Удалено'); nav('/catalog'); } };
   const rows: [string, any][] = [['Категория', it.category], ['Производитель', it.maker], ['Модель', it.model], ['Серийный номер', it.serial], ['Инв. номер', it.invNo],
-    ['Место', it.place], ['Цена', it.price != null ? `${it.price} ${it.currency || ''}` : ''], ['Куплено', it.bought], ['Магазин', it.shop], ['Гарантия до', it.warranty],
-    ['Описание', it.desc], ['Примечания', it.notes], ['Добавлено', new Date(it.created).toLocaleString('ru')], ['Изменено', new Date(it.updated).toLocaleString('ru')]];
+    ['Место', it.place], ['Примечания', it.notes], ['Добавлено', new Date(it.created).toLocaleString('ru')], ['Изменено', new Date(it.updated).toLocaleString('ru')]];
   return (<>
     <h1>{it.name}</h1>
     {it.deleted && <div className="card dng">Предмет удалён. <button onClick={() => upd({ deleted: false })}>Восстановить</button></div>}
