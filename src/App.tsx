@@ -8,45 +8,172 @@ import { db, Item, CATEGORIES, newItem, resizeImage, itemUrl, parseQr, exportBac
 let toastSet: (s: string) => void = () => {};
 const toast = (s: string) => toastSet(s);
 
+const menu = [
+  { to: '/', icon: '⌂', title: 'Главная' },
+  { to: '/catalog', icon: '⚒', title: 'Инструменты' },
+  { to: '/warehouse', icon: '▣', title: 'Расходники / Склад' },
+  { to: '/scan', icon: '▦', title: 'QR-коды' },
+  { to: '/places', icon: '⌖', title: 'Места хранения' },
+  { to: '/history', icon: '◷', title: 'История изменений' },
+  { to: '/reports', icon: '▥', title: 'Отчёты и статистика' },
+  { to: '/settings', icon: '⚙', title: 'Настройки' }
+];
+
 export default function App() {
   const [msg, setMsg] = useState('');
-  toastSet = (s) => { setMsg(s); setTimeout(() => setMsg(''), 2500); };
-  useEffect(() => { document.documentElement.dataset.theme = localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); }, []);
-  return (<>
-    <nav>
-      <NavLink to="/">Главная</NavLink><NavLink to="/catalog">Каталог</NavLink>
-      <NavLink to="/new">＋ Добавить</NavLink><NavLink to="/scan">Скан QR</NavLink><NavLink to="/settings">Настройки</NavLink>
-    </nav>
-    <main>
+  toastSet = (message) => { setMsg(message); window.setTimeout(() => setMsg(''), 2500); };
+  useEffect(() => {
+    document.documentElement.dataset.theme = localStorage.getItem('theme') || 'dark';
+  }, []);
+  return <div className="app-shell">
+    <aside className="sidebar">
+      <Link to="/" className="brand"><span className="brand-mark">⚙</span><span><strong>Workshop Inventory</strong><small>Учёт мастерской</small></span></Link>
+      <div className="sidebar-line" aria-hidden="true" />
+      <nav aria-label="Основное меню">
+        {menu.map(link => <NavLink key={link.to} to={link.to} end={link.to === '/'} className={({isActive}) => isActive ? 'active' : ''}>
+          <span className="nav-icon" aria-hidden="true">{link.icon}</span><span className="nav-title">{link.title}</span>
+        </NavLink>)}
+      </nav>
+      <div className="sidebar-foot">
+        <div className="foot-title">▣ Моя мастерская</div>
+        <div className="mut foot-sub">● Локальная база (IndexedDB)</div>
+        <div className="foot-pills"><span>Дизайн 1.0</span><span>PWA</span></div>
+      </div>
+    </aside>
+    <main className="content">
       <Routes>
-        <Route path="/" element={<Home />} /><Route path="/catalog" element={<Catalog />} />
-        <Route path="/new" element={<Form />} /><Route path="/i/:id" element={<Card />} />
-        <Route path="/edit/:id" element={<Form />} /><Route path="/scan" element={<Scan />} />
-        <Route path="/settings" element={<Settings />} /><Route path="*" element={<Missing />} />
+        <Route path="/" element={<Home />} />
+        <Route path="/catalog" element={<Catalog />} />
+        <Route path="/warehouse" element={<Warehouse />} />
+        <Route path="/places" element={<Places />} />
+        <Route path="/history" element={<History />} />
+        <Route path="/reports" element={<Reports />} />
+        <Route path="/new" element={<Form />} />
+        <Route path="/i/:id" element={<Card />} />
+        <Route path="/edit/:id" element={<Form />} />
+        <Route path="/scan" element={<Scan />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="*" element={<Missing />} />
       </Routes>
     </main>
     {msg && <div className="toast" role="status">{msg}</div>}
-  </>);
+  </div>;
 }
 
 const live = () => useLiveQuery(() => db.items.filter(i => !i.deleted).toArray(), [], undefined as Item[] | undefined);
 
+const consumableCategories = new Set(['Расходные материалы', 'Крепёж', 'Запчасти', 'Электротовары', 'Оснастка']);
+const money = (amount: number) => amount.toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
+const displayDate = (time: number) => new Date(time).toLocaleDateString('ru-RU', {day:'2-digit',month:'short',year:'numeric'});
+const categoryList = (items: Item[]) => CATEGORIES.map(name => ({ name, count: items.filter(i => i.category === name).length })).filter(x => x.count > 0).sort((a,b) => b.count - a.count);
+
+function SectionHead({title, href}: {title:string;href?:string}) {
+  return <div className="panel-head"><h2>{title}</h2>{href && <Link to={href}>Посмотреть все →</Link>}</div>;
+}
+
 function Home() {
-  const items = live(); const [q, setQ] = useState(''); const nav = useNavigate();
-  if (!items) return null;
-  const recent = [...items].sort((a, b) => b.created - a.created).slice(0, 5);
-  return (<>
-    <h1>Мастерская</h1>
-    <input placeholder="Быстрый поиск…" value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && nav('/catalog?q=' + encodeURIComponent(q))} />
-    <div className="grid">
-      <div className="card"><div className="stat">{items.length}</div>Всего предметов</div>
-      <div className="card"><div className="stat">{items.filter(i => i.category === 'Электроинструменты').length}</div>Электроинструменты</div>
-      <div className="card"><div className="stat">{items.filter(i => i.category === 'Станки и оборудование').length}</div>Оборудование</div>
-    </div>
-    <h2>Недавно добавлено</h2>
-    {recent.length === 0 && <div className="card mut">Пока пусто. Нажмите «＋ Добавить», чтобы создать первую карточку.</div>}
-    {recent.map(i => <Row key={i.id} i={i} />)}
-  </>);
+  const items = live();
+  const [query, setQuery] = useState('');
+  const nav = useNavigate();
+  if (!items) return <div className="panel">Загрузка данных…</div>;
+  const tools = items.filter(i => !consumableCategories.has(i.category));
+  const consumables = items.filter(i => consumableCategories.has(i.category));
+  const totalCost = items.reduce((sum,i) => sum + (i.currency === 'RUB' || !i.currency ? (i.price || 0) : 0), 0);
+  const placesCount = new Set(items.map(i => i.place?.trim()).filter(Boolean)).size;
+  const recent = [...items].sort((a,b) => b.updated - a.updated).slice(0,5);
+  const categories = categoryList(items).slice(0,6);
+  const max = Math.max(1,...categories.map(c=>c.count));
+  return <>
+    <header className="hero">
+      <div><h1>Добро пожаловать в <em>Workshop Inventory!</em></h1><p>Учёт инструментов, оборудования и расходных материалов в вашей мастерской</p></div>
+      <div className="hero-search"><span>⌕</span><input aria-label="Поиск инструментов" placeholder="Поиск инструментов, расходников, мест…" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')nav('/catalog?q='+encodeURIComponent(query));}} /></div>
+    </header>
+    <section className="kpi-grid" aria-label="Обзор мастерской">
+      <Link className="kpi" to="/catalog"><span className="kpi-icon blue">⚒</span><span>Всего инструментов<strong>{tools.length}</strong></span></Link>
+      <Link className="kpi" to="/warehouse"><span className="kpi-icon gold">▣</span><span>Позиций расходников<strong>{consumables.length}</strong></span></Link>
+      <Link className="kpi" to="/places"><span className="kpi-icon green">⌖</span><span>Мест хранения<strong>{placesCount}</strong></span></Link>
+      <div className="kpi"><span className="kpi-icon violet">₽</span><span>Учтённая стоимость<strong>{money(totalCost)}</strong></span></div>
+      <Link className="kpi" to="/reports"><span className="kpi-icon blue">▥</span><span>Всего позиций<strong>{items.length}</strong></span></Link>
+    </section>
+    <section className="dashboard-middle">
+      <div className="panel">
+        <SectionHead title="◷ Последние изменения" href="/history"/>
+        <div className="panel-body">
+          {recent.length === 0 ? <p className="mut">Карточек ещё нет. Добавьте первый инструмент или расходник.</p> : recent.map(i=><Link className="activity-line" key={i.id} to={'/i/'+i.id}><span className="activity-symbol">＋</span><span className="activity-description"><b>{i.name}</b><small>{i.category}{i.place?' · '+i.place:''}</small></span><time>{displayDate(i.updated)}</time></Link>)}
+        </div>
+      </div>
+      <div className="panel">
+        <SectionHead title="ϟ Быстрые действия"/>
+        <div className="action-grid">
+          <Link className="action primary-action" to="/new"><span>＋</span>Добавить предмет</Link>
+          <Link className="action" to="/warehouse"><span>▣</span>Расходники</Link>
+          <Link className="action" to="/scan"><span>▦</span>Сканировать QR</Link>
+          <Link className="action" to="/catalog"><span>⚒</span>Каталог</Link>
+          <Link className="action" to="/places"><span>⌖</span>Места хранения</Link>
+          <Link className="action" to="/settings"><span>⇩</span>Резервная копия</Link>
+        </div>
+      </div>
+      <div className="panel">
+        <SectionHead title="♧ Информация"/>
+        <div className="panel-body info-list">
+          <div><span>▣</span><p><strong>Складские остатки</strong><small>Количественный учёт пока не подключён</small></p></div>
+          <div><span>⌖</span><p><strong>Места хранения</strong><small>Указано мест: {placesCount}</small></p></div>
+          <div><span>▦</span><p><strong>QR-наклейки</strong><small>Создаются в карточках предметов</small></p></div>
+          <div><span>◉</span><p><strong>Сохранение данных</strong><small>На этом устройстве. Делайте резервные копии</small></p></div>
+        </div>
+      </div>
+    </section>
+    <section className="dashboard-bottom">
+      <div className="panel">
+        <SectionHead title="◴ Распределение по типам"/>
+        <div className="distribution">
+          <div className="donut" style={{background:items.length?'conic-gradient(#16dca5 0 '+(tools.length/items.length*100)+'%, #299cff 0 100%)':'conic-gradient(#243a56 0 100%)'}}><div><strong>{items.length}</strong><small>всего позиций</small></div></div>
+          <div className="legend"><div><i className="green-dot"/>Инструменты и оборудование <b>{tools.length}</b></div><div><i className="blue-dot"/>Расходники <b>{consumables.length}</b></div></div>
+        </div>
+      </div>
+      <div className="panel">
+        <SectionHead title="▥ Топ категорий" href="/reports"/>
+        <div className="panel-body category-bars">
+          {categories.length ? categories.map(c=><div key={c.name} className="bar-line"><span>{c.name}</span><div className="bar-track"><div style={{width:(c.count/max*100)+'%'}}/></div><b>{c.count}</b></div>):<p className="mut">Категории появятся после добавления предметов.</p>}
+        </div>
+      </div>
+    </section>
+  </>;
+}
+
+function Warehouse(){
+  const items=live();
+  const list=(items||[]).filter(i=>consumableCategories.has(i.category));
+  return <><div className="page-head"><div><h1>Расходники / Склад</h1><p className="mut">Каталог расходных материалов и комплектующих</p></div><Link className="btn pri" to="/new">＋ Добавить</Link></div>
+    <div className="panel panel-body"><p className="mut">Учёт количества, приходов и списаний будет добавлен отдельно. Сейчас доступны карточки, фотографии и QR-коды.</p></div>
+    {list.length?list.map(i=><Row key={i.id} i={i}/>):<div className="panel panel-body mut">Пока нет расходников. Для новой позиции выберите категорию «Расходные материалы», «Крепёж» или «Запчасти».</div>}
+  </>;
+}
+function Places(){
+  const items=live();
+  const grouped=new Map<string,Item[]>();
+  (items||[]).forEach(i=>{const place=i.place?.trim();if(place)grouped.set(place,[...(grouped.get(place)||[]),i]);});
+  return <><h1>Места хранения</h1><p className="mut">Места формируются автоматически из карточек инструментов.</p>
+    {[...grouped.entries()].sort((a,b)=>a[0].localeCompare(b[0],'ru')).map(([place,list])=><div className="panel" key={place}><SectionHead title={'⌖ '+place}/><div className="panel-body">{list.map(i=><Row key={i.id} i={i}/>)}</div></div>)}
+    {!grouped.size&&<div className="panel panel-body mut">Пока не указано ни одного места хранения. Добавьте место в карточке предмета.</div>}
+  </>;
+}
+function History(){
+  const items=live();
+  return <><h1>Последние изменения</h1><p className="mut">Список карточек по времени изменения. Подробный журнал операций пока не реализован.</p>
+    {[...(items||[])].sort((a,b)=>b.updated-a.updated).map(i=><Link key={i.id} to={'/i/'+i.id} className="panel history-entry"><b>{i.name}</b><small>{i.category} · {new Date(i.updated).toLocaleString('ru-RU')}</small></Link>)}
+    {!items?.length&&<div className="panel panel-body mut">Пока нет записей.</div>}
+  </>;
+}
+function Reports(){
+  const items=live();
+  const list=categoryList(items||[]);
+  const max=Math.max(1,...list.map(i=>i.count));
+  return <><h1>Отчёты и статистика</h1><div className="kpi-grid"><div className="kpi"><span>Всего позиций<strong>{items?.length||0}</strong></span></div>
+    <div className="kpi"><span>Категорий<strong>{list.length}</strong></span></div>
+    <div className="kpi"><span>Мест хранения<strong>{new Set((items||[]).map(i=>i.place).filter(Boolean)).size}</strong></span></div></div>
+    <div className="panel"><SectionHead title="▥ Количество по категориям"/><div className="panel-body category-bars">{list.map(c=><div className="bar-line" key={c.name}><span>{c.name}</span><div className="bar-track"><div style={{width:(c.count/max*100)+'%'}}/></div><b>{c.count}</b></div>)}{!list.length&&<p className="mut">Нет данных.</p>}</div></div>
+  </>;
 }
 
 function Row({ i }: { i: Item }) {
