@@ -1,0 +1,22 @@
+:root{--bg:#f1f5f9;--card:#fff;--tx:#0f172a;--mut:#475569;--bd:#cbd5e1;--ac:#2563eb;--danger:#dc2626}
+[data-theme=dark]{--bg:#0f172a;--card:#1e293b;--tx:#f1f5f9;--mut:#cbd5e1;--bd:#475569;--ac:#60a5fa;--danger:#f87171}
+*{box-sizing:border-box}body{margin:0;font:16px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+main{max-width:900px;margin:0 auto;padding:16px 16px 90px}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
+nav a{flex:1;text-align:center;padding:12px 4px;color:var(--mut);text-decoration:none;font-size:14px}
+nav a.active{color:var(--ac);font-weight:700}
+@media(min-width:800px){nav{top:0;bottom:auto;width:170px;flex-direction:column;border:0;border-right:1px solid var(--bd)}nav a{text-align:left;padding:14px 18px;font-size:16px}main{margin-left:190px}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin:10px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.stat{font-size:28px;font-weight:700}.mut{color:var(--mut)}
+button,.btn,select,input,textarea{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;min-height:44px}
+input,select,textarea{width:100%;margin:4px 0 10px}
+button,.btn{cursor:pointer;text-decoration:none;display:inline-block;margin:3px}
+.pri{background:var(--ac);color:#fff;border-color:var(--ac)}.dng{color:var(--danger);border-color:var(--danger)}
+:focus-visible{outline:3px solid var(--ac);outline-offset:2px}
+.thumb{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;background:var(--bd)}
+.row{display:flex;gap:10px;align-items:center}.row img{width:64px;height:64px;object-fit:cover;border-radius:8px}
+.tag{font-size:12px;border:1px solid var(--bd);border-radius:20px;padding:2px 8px;color:var(--mut)}
+.toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 18px;border-radius:10px;z-index:9}
+.label{display:none}
+@media print{body *{visibility:hidden}.label,.label *{visibility:visible}.label{display:block;position:absolute;left:0;top:0;text-align:center;font-size:8pt;color:#000;background:#fff}.label img{width:100%}}
