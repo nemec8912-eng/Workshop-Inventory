@@ -93,6 +93,8 @@ function SectionHead({title, href}: {title:string;href?:string}) {
 function Home() {
   const items = live();
   const [query, setQuery] = useState('');
+  const [hidden] = useState<string[]>(()=>{try{return JSON.parse(localStorage.getItem('hidden-widgets')||'[]');}catch{return [];}});
+  const visible=(k:string)=>!hidden.includes(k);
   const nav = useNavigate();
   if (!items) return <div className="panel">Загрузка данных…</div>;
   const tools = items.filter(i => !consumableCategories.has(i.category));
@@ -107,20 +109,20 @@ function Home() {
       <div><h1>Добро пожаловать в <em>Workshop Inventory!</em></h1><p>Учёт инструментов, оборудования и расходных материалов в вашей мастерской</p></div>
       <div className="hero-search"><span>⌕</span><input aria-label="Поиск инструментов" placeholder="Поиск инструментов, расходников, мест…" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')nav('/catalog?q='+encodeURIComponent(query));}} /></div>
     </header>
-    <section className="kpi-grid" aria-label="Обзор мастерской">
+    {visible("metrics")&&<section className="kpi-grid" aria-label="Обзор мастерской">
       <Link className="kpi" to="/catalog"><span className="kpi-icon blue"><Icon name="drill"/></span><span>Всего инструментов<strong>{tools.length}</strong></span></Link>
       <Link className="kpi" to="/stock"><span className="kpi-icon gold"><Icon name="box"/></span><span>Позиций расходников<strong>{consumables.length}</strong></span></Link>
       <Link className="kpi" to="/places"><span className="kpi-icon green"><Icon name="shelves"/></span><span>Мест хранения<strong>{placesCount}</strong></span></Link>
       <Link className="kpi" to="/reports"><span className="kpi-icon blue"><Icon name="chart"/></span><span>Всего позиций<strong>{items.length}</strong></span></Link>
-    </section>
+    </section>}
     <section className="dashboard-middle">
-      <div className="panel">
+      {visible("recent")&&<div className="panel">
         <SectionHead title="◷ Последние изменения" href="/history"/>
         <div className="panel-body">
-          {recent.length === 0 ? <p className="mut">Карточек ещё нет. Добавьте первый инструмент или расходник.</p> : recent.map(i=><Link className="activity-line" key={i.id} to={'/i/'+i.id}><span className="activity-symbol">＋</span><span className="activity-description"><b>{i.name}</b><small>{i.category}{i.place?' · '+i.place:''}</small></span><time>{displayDate(i.updated)}</time></Link>)}
+          {recent.length === 0 ? <div className="empty"><Icon name="box" size={40}/><p>Предметов пока нет</p><Link className="btn pri" to="/new">Добавить первый инструмент</Link></div> : recent.map(i=><Link className="activity-line" key={i.id} to={'/i/'+i.id}><span className="activity-symbol">＋</span><span className="activity-description"><b>{i.name}</b><small>{i.category}{i.place?' · '+i.place:''}</small></span><time>{displayDate(i.updated)}</time></Link>)}
         </div>
-      </div>
-      <div className="panel">
+      </div>}
+      {visible("quick")&&<div className="panel">
         <SectionHead title="ϟ Быстрые действия"/>
         <div className="action-grid">
           <Link className="action primary-action" to="/new"><span><Icon name="plus"/></span>Добавить инструмент</Link>
@@ -130,8 +132,8 @@ function Home() {
           <Link className="action" to="/places"><span><Icon name="shelves"/></span>Места хранения</Link>
           <Link className="action" to="/settings"><span><Icon name="download"/></span>Резервная копия</Link>
         </div>
-      </div>
-      <div className="panel">
+      </div>}
+      {visible("info")&&<div className="panel">
         <SectionHead title="♧ Информация"/>
         <div className="panel-body info-list">
           <div><span>▣</span><p><strong>Складские остатки</strong><small>Количественный учёт пока не подключён</small></p></div>
@@ -139,9 +141,9 @@ function Home() {
           <div><span>▦</span><p><strong>QR-наклейки</strong><small>Создаются в карточках предметов</small></p></div>
           <div><span>◉</span><p><strong>Сохранение данных</strong><small>На этом устройстве. Делайте резервные копии</small></p></div>
         </div>
-      </div>
+      </div>}
     </section>
-    <section className="dashboard-bottom">
+    {visible("charts")&&<section className="dashboard-bottom">
       <div className="panel">
         <SectionHead title="◴ Распределение по типам"/>
         <div className="distribution">
@@ -155,7 +157,7 @@ function Home() {
           {categories.length ? categories.map(c=><div key={c.name} className="bar-line"><span>{c.name}</span><div className="bar-track"><div style={{width:(c.count/max*100)+'%'}}/></div><b>{c.count}</b></div>):<p className="mut">Категории появятся после добавления предметов.</p>}
         </div>
       </div>
-    </section>
+    </section>}
   </>;
 }
 
@@ -381,20 +383,27 @@ function Scan() {
 
 function Settings() {
   const del = useLiveQuery(() => db.items.filter(i => !!i.deleted).toArray(), [], [] as Item[]);
-  const [theme, setTheme] = useState(document.documentElement.dataset.theme || 'light');
+  const [theme, setTheme] = useState(document.documentElement.dataset.theme || 'dark');
+  const [accent,setAccent] = useState(localStorage.getItem('accent')||'blue');
+  const [hidden,setHidden] = useState<string[]>(()=>{try{return JSON.parse(localStorage.getItem('hidden-widgets')||'[]');}catch{return [];}});
+  const changeAccent=(c:string)=>{setAccent(c);document.documentElement.dataset.accent=c;localStorage.setItem('accent',c);};
+  const toggleWidget=(w:string)=>setHidden(current=>{const next=current.includes(w)?current.filter(x=>x!==w):[...current,w];localStorage.setItem('hidden-widgets',JSON.stringify(next));return next;});
   const toggle = () => { const t = theme === 'dark' ? 'light' : 'dark'; setTheme(t); document.documentElement.dataset.theme = t; localStorage.setItem('theme', t); };
   const exp = async () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([await exportBackup()], { type: 'application/json' })); a.download = `workshop-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click(); toast('Копия создана'); };
   const imp = async (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]; if (!f) return;
     try {
-      const incoming = validateBackup(JSON.parse(await f.text())); const r = mergeItems(await db.items.toArray(), incoming);
-      if (!confirm(`Будет добавлено: ${r.added}, обновлено: ${r.updated}. Существующие записи не удаляются. Продолжить?`)) return;
-      await db.items.bulkPut(r.toWrite); toast('Импорт выполнен');
+      const backup = validateBackup(JSON.parse(await f.text()));
+      if (!confirm(`В копии: предметов ${backup.items.length}, расходников ${backup.stock.length}, мест ${backup.places.length}. Существующие записи не удаляются. Продолжить?`)) return;
+      const added=await importBackup(backup); toast(`Импорт выполнен, новых записей: ${added}`);
     } catch (err: any) { toast(err.message || 'Ошибка импорта'); }
     e.target.value = '';
   };
   return (<><h1>Настройки</h1>
-    <div className="card"><button onClick={toggle}>Тема: {theme === 'dark' ? 'тёмная' : 'светлая'}</button></div>
+    <div className="card"><h3>Внешний вид</h3><button onClick={toggle}>Тема: {theme === 'dark' ? 'тёмная' : 'светлая'}</button>
+      <p>Акцентный цвет</p>{[['blue','Синий'],['orange','Оранжевый'],['green','Зелёный']].map(([key,name])=><button key={key} className={accent===key?'pri':''} onClick={()=>changeAccent(key)}>{name}</button>)}
+      <h3>Виджеты главной</h3>{[['metrics','Статистика'],['recent','Последние изменения'],['quick','Быстрые действия'],['info','Информация'],['charts','Диаграммы']].map(([k,name])=><label className="row" key={k}><input type="checkbox" style={{width:24}} checked={!hidden.includes(k)} onChange={()=>toggleWidget(k)}/>{name}</label>)}
+    </div>
     <div className="card"><h3>Резервная копия</h3><p className="mut">Данные хранятся только на этом устройстве. Делайте копии регулярно.</p>
       <button className="pri" onClick={exp}>Скачать копию (JSON)</button><input type="file" accept="application/json" onChange={imp} /></div>
     <div className="card"><h3>Удалённые ({del?.length || 0})</h3>{del?.map(i => <div key={i.id} className="row">{i.name}<button onClick={() => db.items.update(i.id, { deleted: false, updated: Date.now() })}>Восстановить</button></div>)}</div></>);
