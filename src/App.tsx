@@ -92,6 +92,7 @@ function SectionHead({title, href}: {title:string;href?:string}) {
 
 function Home() {
   const items = live();
+  const stock = useLiveQuery(()=>db.stock.filter(i=>!i.deleted).toArray(),[],[]);
   const [query, setQuery] = useState('');
   const [hidden] = useState<string[]>(()=>{try{return JSON.parse(localStorage.getItem('hidden-widgets')||'[]');}catch{return [];}});
   const visible=(k:string)=>!hidden.includes(k);
@@ -99,6 +100,7 @@ function Home() {
   if (!items) return <div className="panel">Загрузка данных…</div>;
   const tools = items.filter(i => !consumableCategories.has(i.category));
   const consumables = items.filter(i => consumableCategories.has(i.category));
+  const stockCount = (stock?.length||0) + consumables.length;
   const placesCount = new Set(items.map(i => i.place?.trim()).filter(Boolean)).size;
   const recent = [...items].sort((a,b) => b.updated - a.updated).slice(0,5);
   const categories = categoryList(items).slice(0,6);
@@ -111,9 +113,9 @@ function Home() {
     </header>
     {visible("metrics")&&<section className="kpi-grid" aria-label="Обзор мастерской">
       <Link className="kpi" to="/catalog"><span className="kpi-icon blue"><Icon name="drill"/></span><span>Всего инструментов<strong>{tools.length}</strong></span></Link>
-      <Link className="kpi" to="/stock"><span className="kpi-icon gold"><Icon name="box"/></span><span>Позиций расходников<strong>{consumables.length}</strong></span></Link>
+      <Link className="kpi" to="/stock"><span className="kpi-icon gold"><Icon name="box"/></span><span>Позиций расходников<strong>{stockCount}</strong></span></Link>
       <Link className="kpi" to="/places"><span className="kpi-icon green"><Icon name="shelves"/></span><span>Мест хранения<strong>{placesCount}</strong></span></Link>
-      <Link className="kpi" to="/reports"><span className="kpi-icon blue"><Icon name="chart"/></span><span>Всего позиций<strong>{items.length}</strong></span></Link>
+      <Link className="kpi" to="/reports"><span className="kpi-icon blue"><Icon name="chart"/></span><span>Всего позиций<strong>{items.length+(stock?.length||0)}</strong></span></Link>
     </section>}
     <section className="dashboard-middle">
       {visible("recent")&&<div className="panel">
@@ -367,9 +369,12 @@ function QRStudio() {
 function Scan() {
   const nav = useNavigate(); const [err, setErr] = useState(''); const [code, setCode] = useState(''); const sc = useRef<Html5Qrcode | null>(null);
   const open = async (text: string) => {
-    const id = parseQr(text.trim()); if (!id) return setErr('Это не код Workshop Inventory');
-    const x = await db.items.get(id); if (!x) return setErr('Предмет не найден на этом устройстве. Данные хранятся локально на каждом устройстве.');
-    nav(`/i/${id}`);
+    const raw=text.trim();
+    const stockId=raw.match(/#\/s\/([0-9a-f-]{36})$/i)?.[1];
+    if(stockId){const entry=await db.stock.get(stockId);if(!entry)return setErr('Расходник не найден на этом устройстве');return nav('/s/'+stockId);}
+    const id=parseQr(raw);if(!id)return setErr('Это не код Workshop Inventory');
+    const x=await db.items.get(id);if(!x)return setErr('Предмет не найден на этом устройстве. Для переноса используйте резервную копию.');
+    nav('/i/'+id);
   };
   useEffect(() => {
     const s = new Html5Qrcode('reader'); sc.current = s;
@@ -383,6 +388,7 @@ function Scan() {
 
 function Settings() {
   const del = useLiveQuery(() => db.items.filter(i => !!i.deleted).toArray(), [], [] as Item[]);
+  const deletedStock=useLiveQuery(()=>db.stock.filter(s=>!!s.deleted).toArray(),[],[]);
   const [theme, setTheme] = useState(document.documentElement.dataset.theme || 'dark');
   const [accent,setAccent] = useState(localStorage.getItem('accent')||'blue');
   const [hidden,setHidden] = useState<string[]>(()=>{try{return JSON.parse(localStorage.getItem('hidden-widgets')||'[]');}catch{return [];}});
@@ -406,7 +412,7 @@ function Settings() {
     </div>
     <div className="card"><h3>Резервная копия</h3><p className="mut">Данные хранятся только на этом устройстве. Делайте копии регулярно.</p>
       <button className="pri" onClick={exp}>Скачать копию (JSON)</button><input type="file" accept="application/json" onChange={imp} /></div>
-    <div className="card"><h3>Удалённые ({del?.length || 0})</h3>{del?.map(i => <div key={i.id} className="row">{i.name}<button onClick={() => db.items.update(i.id, { deleted: false, updated: Date.now() })}>Восстановить</button></div>)}</div></>);
+    <div className="card"><h3>Удалённые ({(del?.length||0)+(deletedStock?.length||0)})</h3>{del?.map(i => <div key={i.id} className="row">{i.name}<button onClick={() => db.items.update(i.id, { deleted: false, updated: Date.now() })}>Восстановить</button></div>)}{deletedStock?.map(s=><div key={s.id} className="row">{s.name}<button onClick={()=>db.stock.update(s.id,{deleted:false,updated:Date.now()})}>Восстановить</button></div>)}</div></>);
 }
 
 function Missing() { return <div className="card"><h2>Не найдено</h2><p>Такой карточки нет на этом устройстве.</p><Link className="btn" to="/">На главную</Link></div>; }
