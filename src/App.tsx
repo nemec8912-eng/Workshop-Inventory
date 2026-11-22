@@ -3,35 +3,50 @@ import { NavLink, Route, Routes, Link, useNavigate, useParams } from 'react-rout
 import { useLiveQuery } from 'dexie-react-hooks';
 import QRCode from 'qrcode';
 import { Html5Qrcode } from 'html5-qrcode';
-import { db, Item, CATEGORIES, newItem, resizeImage, itemUrl, parseQr, exportBackup, validateBackup, mergeItems } from './db';
+import Icon, {type IconName} from './Icon';
+import {StockList, StockForm, StockCard} from './Stock';
+import StoragePlaces from './Places';
+import { db, Item, CATEGORIES, newItem, resizeImage, itemUrl, parseQr, exportBackup, validateBackup, mergeItems, importBackup, ensureCats, placePath, type Place } from './db';
 
 let toastSet: (s: string) => void = () => {};
 const toast = (s: string) => toastSet(s);
 
-const menu = [
-  { to: '/', icon: '⌂', title: 'Главная' },
-  { to: '/catalog', icon: '⚒', title: 'Инструменты' },
-  { to: '/warehouse', icon: '▣', title: 'Расходники / Склад' },
-  { to: '/qr', icon: '▦', title: 'QR-коды' },
-  { to: '/places', icon: '⌖', title: 'Места хранения' },
-  { to: '/history', icon: '◷', title: 'История изменений' },
-  { to: '/reports', icon: '▥', title: 'Отчёты и статистика' },
-  { to: '/settings', icon: '⚙', title: 'Настройки' }
+const menu: {to:string;icon:IconName;title:string}[] = [
+  {to:'/',icon:'home',title:'Главная'},
+  {to:'/catalog',icon:'drill',title:'Инструменты'},
+  {to:'/stock',icon:'box',title:'Расходники / Склад'},
+  {to:'/places',icon:'shelves',title:'Места хранения'},
+  {to:'/qr',icon:'qr',title:'QR-коды'},
+  {to:'/history',icon:'clock',title:'История операций'},
+  {to:'/reports',icon:'chart',title:'Отчёты'},
+  {to:'/settings',icon:'settings',title:'Настройки'}
 ];
 
+function AddMenu(){
+ const [open,setOpen]=useState(false);
+ const ref=useRef<HTMLDivElement>(null);
+ useEffect(()=>{if(!open)return;const handler=(e:PointerEvent)=>{if(ref.current&&!ref.current.contains(e.target as Node))setOpen(false);};
+   document.addEventListener('pointerdown',handler);return()=>document.removeEventListener('pointerdown',handler);},[open]);
+ return <div className="add-menu" ref={ref}><button className="pri add-trigger" onClick={()=>setOpen(v=>!v)} aria-expanded={open} aria-haspopup="menu"><Icon name="plus" size={19}/> Добавить <Icon name="chevron" size={17}/></button>
+ {open&&<div className="add-dropdown" role="menu"><Link role="menuitem" to="/new" onClick={()=>setOpen(false)}><Icon name="drill"/> Инструмент</Link>
+   <Link role="menuitem" to="/stock/new" onClick={()=>setOpen(false)}><Icon name="box"/> Расходник</Link></div>}</div>;
+}
+
+function usePlaces(){ return useLiveQuery(()=>db.places.toArray(),[],[] as Place[]); }
+const categoryColor=(cat:string)=>['#54b5ff','#fea04d','#bf90ff','#4bd8b6','#f5cf59','#60d4ee'][Math.abs([...cat].reduce((a,ch)=>a*31+ch.charCodeAt(0),0))%6];
 export default function App() {
   const [msg, setMsg] = useState('');
   toastSet = (message) => { setMsg(message); window.setTimeout(() => setMsg(''), 2500); };
   useEffect(() => {
-    document.documentElement.dataset.theme = localStorage.getItem('theme') || 'dark';
+    document.documentElement.dataset.theme = localStorage.getItem('theme') || 'dark'; ensureCats().catch(()=>{}); document.documentElement.dataset.accent = localStorage.getItem('accent')||'blue';
   }, []);
   return <div className="app-shell">
     <aside className="sidebar">
-      <Link to="/" className="brand"><span className="brand-mark">⚙</span><span><strong>Workshop Inventory</strong><small>Учёт мастерской</small></span></Link>
+      <Link to="/" className="brand"><span className="brand-mark"><img src={import.meta.env.BASE_URL+"favicon.svg"} alt="" width={42} height={42}/></span><span><strong>Workshop Inventory</strong><small>Учёт мастерской</small></span></Link>
       <div className="sidebar-line" aria-hidden="true" />
       <nav aria-label="Основное меню">
         {menu.map(link => <NavLink key={link.to} to={link.to} end={link.to === '/'} className={({isActive}) => isActive ? 'active' : ''}>
-          <span className="nav-icon" aria-hidden="true">{link.icon}</span><span className="nav-title">{link.title}</span>
+          <span className="nav-icon" aria-hidden="true"><Icon name={link.icon} size={21}/></span><span className="nav-title">{link.title}</span>
         </NavLink>)}
       </nav>
       <div className="sidebar-foot">
@@ -44,8 +59,12 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/catalog" element={<Catalog />} />
-        <Route path="/warehouse" element={<Warehouse />} />
-        <Route path="/places" element={<Places />} />
+        <Route path="/warehouse" element={<StockList />} />
+        <Route path="/stock" element={<StockList />} />
+        <Route path="/stock/new" element={<StockForm />} />
+        <Route path="/stock/edit/:id" element={<StockForm />} />
+        <Route path="/s/:id" element={<StockCard />} />
+        <Route path="/places" element={<StoragePlaces />} />
         <Route path="/history" element={<History />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/new" element={<Form />} />
@@ -83,15 +102,16 @@ function Home() {
   const categories = categoryList(items).slice(0,6);
   const max = Math.max(1,...categories.map(c=>c.count));
   return <>
+    <div className="home-toolbar"><span>Обзор мастерской</span><AddMenu/></div>
     <header className="hero">
       <div><h1>Добро пожаловать в <em>Workshop Inventory!</em></h1><p>Учёт инструментов, оборудования и расходных материалов в вашей мастерской</p></div>
       <div className="hero-search"><span>⌕</span><input aria-label="Поиск инструментов" placeholder="Поиск инструментов, расходников, мест…" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')nav('/catalog?q='+encodeURIComponent(query));}} /></div>
     </header>
     <section className="kpi-grid" aria-label="Обзор мастерской">
-      <Link className="kpi" to="/catalog"><span className="kpi-icon blue">⚒</span><span>Всего инструментов<strong>{tools.length}</strong></span></Link>
-      <Link className="kpi" to="/warehouse"><span className="kpi-icon gold">▣</span><span>Позиций расходников<strong>{consumables.length}</strong></span></Link>
-      <Link className="kpi" to="/places"><span className="kpi-icon green">⌖</span><span>Мест хранения<strong>{placesCount}</strong></span></Link>
-      <Link className="kpi" to="/reports"><span className="kpi-icon blue">▥</span><span>Всего позиций<strong>{items.length}</strong></span></Link>
+      <Link className="kpi" to="/catalog"><span className="kpi-icon blue"><Icon name="drill"/></span><span>Всего инструментов<strong>{tools.length}</strong></span></Link>
+      <Link className="kpi" to="/stock"><span className="kpi-icon gold"><Icon name="box"/></span><span>Позиций расходников<strong>{consumables.length}</strong></span></Link>
+      <Link className="kpi" to="/places"><span className="kpi-icon green"><Icon name="shelves"/></span><span>Мест хранения<strong>{placesCount}</strong></span></Link>
+      <Link className="kpi" to="/reports"><span className="kpi-icon blue"><Icon name="chart"/></span><span>Всего позиций<strong>{items.length}</strong></span></Link>
     </section>
     <section className="dashboard-middle">
       <div className="panel">
@@ -103,12 +123,12 @@ function Home() {
       <div className="panel">
         <SectionHead title="ϟ Быстрые действия"/>
         <div className="action-grid">
-          <Link className="action primary-action" to="/new"><span>＋</span>Добавить предмет</Link>
+          <Link className="action primary-action" to="/new"><span><Icon name="plus"/></span>Добавить инструмент</Link>
           <Link className="action" to="/warehouse"><span>▣</span>Расходники</Link>
-          <Link className="action" to="/qr"><span>▦</span>Создать QR-код</Link>
-          <Link className="action" to="/catalog"><span>⚒</span>Каталог</Link>
-          <Link className="action" to="/places"><span>⌖</span>Места хранения</Link>
-          <Link className="action" to="/settings"><span>⇩</span>Резервная копия</Link>
+          <Link className="action" to="/qr"><span><Icon name="qr"/></span>Создать QR-код</Link>
+          <Link className="action" to="/catalog"><span><Icon name="drill"/></span>Каталог</Link>
+          <Link className="action" to="/places"><span><Icon name="shelves"/></span>Места хранения</Link>
+          <Link className="action" to="/settings"><span><Icon name="download"/></span>Резервная копия</Link>
         </div>
       </div>
       <div className="panel">
@@ -178,7 +198,7 @@ function Row({ i }: { i: Item }) {
   return <Link to={`/i/${i.id}`} style={{ color: 'inherit', textDecoration: 'none' }}><div className="card row">
     {i.photos[0] ? <img src={i.photos[0]} alt="" /> : <div style={{ width: 64 }} />}
     <div><b>{i.name}</b><div className="mut">{[i.maker, i.model].filter(Boolean).join(' ')}</div>
-      <span className="tag">{i.category}</span></div></div></Link>;
+      <span className="tag" style={{color:categoryColor(i.category),borderColor:categoryColor(i.category),background:categoryColor(i.category)+"22"}}>{i.category}</span></div></div></Link>;
 }
 
 function Catalog() {
@@ -210,7 +230,7 @@ const FIELDS = [F('name', 'Название *'), F('maker', 'Производи�
   F('place', 'Место хранения (например: Мастерская → Стеллаж 2 → Полка 3)'), F('notes', 'Примечания', { area: true })];
 
 function Form() {
-  const { id } = useParams(); const nav = useNavigate();
+  const { id } = useParams(); const nav = useNavigate(); const places=usePlaces();
   const [it, setIt] = useState<Item | null>(null);
   useEffect(() => { (id ? db.items.get(id) : Promise.resolve(newItem())).then(x => setIt(x ?? null)); }, [id]);
   if (!it) return <div className="card">Загрузка…</div>;
@@ -226,6 +246,7 @@ function Form() {
   };
   return (<>
     <h1>{id ? 'Редактирование' : 'Новый предмет'}</h1>
+    <label>Место хранения из списка<select value={it.placeId??''} onChange={e=>set('placeId',e.target.value||undefined)}><option value="">— Не указано —</option>{places.map(p=><option key={p.id} value={p.id}>{placePath(places,p.id)}</option>)}</select></label>
     <label>Категория<select value={it.category} onChange={e => set('category', e.target.value)}>{CATEGORIES.map(c => <option key={c}>{c}</option>)}</select></label>
     {FIELDS.map(f => <label key={f.k}>{f.label}{f.area
       ? <textarea rows={3} value={(it[f.k] as string) ?? ''} onChange={e => set(f.k, e.target.value)} />
@@ -240,7 +261,7 @@ function Form() {
 }
 
 function Card() {
-  const { id } = useParams(); const nav = useNavigate();
+  const { id } = useParams(); const nav = useNavigate(); const places=usePlaces();
   const it = useLiveQuery(() => db.items.get(id!), [id]);
   const [qr, setQr] = useState(''); const [size, setSize] = useState(40); const [big, setBig] = useState('');
   useEffect(() => { if (id) QRCode.toDataURL(itemUrl(id), { width: 512, margin: 2 }).then(setQr); }, [id]);
@@ -249,7 +270,7 @@ function Card() {
   const upd = (p: Partial<Item>) => db.items.update(it.id, { ...p, updated: Date.now() });
   const del = async () => { if (confirm('Удалить предмет? Его можно будет восстановить в настройках.')) { await upd({ deleted: true }); toast('Удалено'); nav('/catalog'); } };
   const rows: [string, any][] = [['Категория', it.category], ['Производитель', it.maker], ['Модель', it.model],
-    ['Место', it.place], ['Примечания', it.notes], ['Добавлено', new Date(it.created).toLocaleString('ru')], ['Изменено', new Date(it.updated).toLocaleString('ru')]];
+    ['Место', placePath(places,it.placeId)||it.place], ['Примечания', it.notes], ['Добавлено', new Date(it.created).toLocaleString('ru')], ['Изменено', new Date(it.updated).toLocaleString('ru')]];
   return (<>
     <h1>{it.name}</h1>
     {it.deleted && <div className="card dng">Предмет удалён. <button onClick={() => upd({ deleted: false })}>Восстановить</button></div>}
