@@ -36,6 +36,6 @@ export default function QrSheet(){
       {!all.length&&<div className="empty"><Icon name="qr" size={40}/><h3>Пока нечего печатать</h3><Link className="btn pri" to="/new">Добавить первый инструмент</Link></div>}
     </div>
     <h2>Предпросмотр листа</h2><div className={'sheet '+page}>{chosen.map(e=><div key={e.id} className="label" style={{width:size+'mm',minHeight:size+'mm'}}>{codes[e.id]&&<img src={codes[e.id]} alt="QR-код"/>}<div>{e.name}</div><div>{e.id.slice(0,8)}</div></div>)}</div>
-    <style>{page==='a4'?'@media print{@page{size:A4;margin:8mm}}':\`@media print{@page{size:\${size}mm \${size}mm;margin:0}}\`}</style>
+    <style>{page==='a4'?'@media print{@page{size:A4;margin:8mm}}':'@media print{@page{size:'+size+'mm '+size+'mm;margin:0}}'}</style>
   </>;
 }
