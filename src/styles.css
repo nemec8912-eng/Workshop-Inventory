@@ -86,3 +86,10 @@ body:before{background-image:radial-gradient(ellipse at 75% 0%,rgba(20,106,180,.
 [data-accent=orange] .pri{background:linear-gradient(120deg,#a44b09,#fb923c)!important;border-color:#f49a49!important}
 [data-accent=green] .pri{background:linear-gradient(120deg,#076e5a,#26bfa1)!important;border-color:#36bf9a!important}
 @media print{.stock-row,.home-toolbar{display:none!important}}
+
+
+/* Two-panel catalogue */
+.split{display:grid;grid-template-columns:minmax(330px,.9fr) minmax(380px,1.25fr);gap:16px;align-items:start}
+.split-list,.split-card{min-width:0;max-height:calc(100vh - 52px);overflow:auto;scrollbar-width:thin;padding:0 4px}
+.split .card{margin:10px 0}
+@media(max-width:1120px){.split{display:block}.split.catalog-only .split-card{display:none}.split.with-card .split-list{display:none}.split-list,.split-card{max-height:none;overflow:visible}}
