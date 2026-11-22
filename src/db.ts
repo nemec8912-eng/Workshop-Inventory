@@ -115,6 +115,30 @@ export async function exportBackup() {
   return JSON.stringify({ app:'workshop-inventory',version:BACKUP_VERSION,exported:new Date().toISOString(),items,places,stock,ops });
 }
 
+export async function importBackup(data: ReturnType<typeof validateBackup>) {
+  const prevItems=await db.items.toArray();
+  const incoming=data.noPhotos?data.items.map(i=>({...i,photos:prevItems.find(p=>p.id===i.id)?.photos??[]})):data.items;
+  const r=mergeItems(prevItems,incoming);
+  const oldStock=await db.stock.toArray();
+  const stockUpdates=data.stock.filter(i=>{
+    const old=oldStock.find(p=>p.id===i.id);
+    return !old||(i.updated??0)>(old.updated??0);
+  }).map(i=>data.noPhotos?{...i,photo:oldStock.find(p=>p.id===i.id)?.photo}:i);
+  const oldPlaces=await db.places.toArray();
+  const placeUpdates=data.places.filter(i=>{
+    const old=oldPlaces.find(p=>p.id===i.id);return !old||(i.updated??0)>(old.updated??0);
+  });
+  await db.transaction('rw',db.items,db.stock,db.places,db.ops,async()=>{
+    await db.items.bulkPut(r.toWrite);
+    await db.stock.bulkPut(stockUpdates);
+    await db.places.bulkPut(placeUpdates);
+    const ids=new Set((await db.ops.toCollection().primaryKeys()) as string[]);
+    await db.ops.bulkPut(data.ops.filter(o=>!ids.has(o.id)));
+  });
+  return r.added+stockUpdates.filter(i=>!oldStock.some(p=>p.id===i.id)).length+placeUpdates.filter(i=>!oldPlaces.some(p=>p.id===i.id)).length;
+}
+export const stockUrl = (id:string)=>location.origin+location.pathname+'#/s/'+id;
+
 // ---------- фото ----------
 export function resizeImage(file: File, max = 1280): Promise<string> {
   return new Promise((res, rej) => {
