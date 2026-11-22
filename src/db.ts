@@ -9,13 +9,21 @@ export interface Item {
   maker?: string; model?: string; serial?: string; invNo?: string;
   desc?: string; place?: string; notes?: string;
   price?: number; currency?: string; bought?: string; shop?: string; warranty?: string;
+  qty?: number; placeId?: string;
   photos: string[]; // сжатые изображения (dataURL), первое — главное
   deleted?: boolean;
   created: number; updated: number;
 }
 
+export interface Place { id: string; name: string; parentId?: string; updated: number }
+export interface Stock { id: string; name: string; category?: string; sku?: string; qty: number; unit: string; min: number; placeId?: string; notes?: string; photo?: string; deleted?: boolean; created: number; updated: number }
+export interface Op { id: string; ts: number; kind: string; ref: string; refName: string; text: string }
+export interface Cat { name: string }
+export const UNITS = ['шт', 'компл', 'м', 'кг', 'г', 'л', 'мл', 'упак'];
+
 class WorkshopDB extends Dexie {
   items!: Table<Item, string>;
+  places!: Table<Place, string>; stock!: Table<Stock, string>; ops!: Table<Op, string>; cats!: Table<Cat, string>;
   constructor() {
     super('workshop-inventory');
     this.version(1).stores({ items: 'id,name,category,status,updated' });
@@ -33,28 +41,61 @@ class WorkshopDB extends Dexie {
         delete item.previousStatus;
       });
     });
+    this.version(4).stores({
+      items: 'id,name,category,updated,placeId',
+      places: 'id,parentId', stock: 'id,name,placeId',
+      ops: 'id,ts,ref', cats: 'name'
+    }).upgrade(async tx => {
+      await tx.table('items').toCollection().modify((item: Item) => {
+        if (!Number.isFinite(item.qty) || (item.qty ?? 0) < 0) item.qty = 1;
+      });
+    });
   }
 }
 export const db = new WorkshopDB();
 
 export const newItem = (): Item => ({
-  id: crypto.randomUUID(), name: '', category: CATEGORIES[0], currency: 'RUB',
+  id: crypto.randomUUID(), name: '', category: CATEGORIES[0], qty: 1, currency: 'RUB',
   photos: [], created: Date.now(), updated: Date.now()
 });
 
-// ---------- резервные копии ----------
-export const BACKUP_VERSION = 1;
+export const newStock = (): Stock => ({ id: crypto.randomUUID(), name: '', qty: 0, unit: 'шт', min: 0, created: Date.now(), updated: Date.now() });
+export const placePath = (places: Place[], id?: string): string => {
+  const path: string[] = []; let node=places.find(x=>x.id===id); let hops=0;
+  while(node && hops++<25){path.unshift(node.name);node=places.find(x=>x.id===node!.parentId);}
+  return path.join(' → ');
+};
+export const logOp = (kind: string, ref: string, refName: string, text: string) => db.ops.add({ id:crypto.randomUUID(), ts:Date.now(), kind, ref, refName, text });
+export const ensureCats = async () => {if(await db.cats.count()===0)await db.cats.bulkPut(CATEGORIES.map(name=>({name})));};
+export type StockKind = 'Приход'|'Расход'|'Корректировка'|'Списание';
+export function stockDelta(s:Stock,kind:StockKind,amount:number):number {return kind==='Приход'?amount:kind==='Корректировка'?amount-s.qty:-amount;}
+export async function applyStock(id:string,kind:string,delta:number,note='') {
+  if(!Number.isFinite(delta))throw Error('Некорректное количество');
+  return db.transaction('rw',db.stock,db.ops,async()=>{
+    const s=await db.stock.get(id);if(!s)throw Error('Расходник не найден');
+    const qty=Math.round((s.qty+delta)*1000)/1000;
+    if(qty<0)throw Error('Недостаточный остаток');
+    await db.stock.update(id,{qty,updated:Date.now()});
+    await logOp(kind,id,s.name,`${delta>0?'+':''}${delta} ${s.unit}, остаток ${qty}${note?' — '+note:''}`);
+    return qty;
+  });
+}
 
-export function validateBackup(data: any): Item[] {
+// ---------- резервные копии ----------
+export const BACKUP_VERSION = 2;
+
+export function validateBackup(data: any): {items:Item[];places:Place[];stock:Stock[];ops:Op[];noPhotos:boolean} {
   if (!data || typeof data !== 'object' || data.app !== 'workshop-inventory' || !Array.isArray(data.items))
     throw new Error('Это не резервная копия Workshop Inventory');
   if (data.version > BACKUP_VERSION) throw new Error('Копия создана более новой версией приложения');
-  return data.items.map((i: any) => {
+  const items: Item[] = data.items.map((i: any) => {
     if (typeof i?.id !== 'string' || typeof i?.name !== 'string') throw new Error('Повреждена запись в копии');
     const { status: _status, previousStatus: _previousStatus, ...clean } = i;
     return { ...newItem(), ...clean,
       photos: Array.isArray(i.photos) ? i.photos.filter((p: any) => typeof p === 'string' && p.startsWith('data:image/')) : [] } as Item;
   });
+  return { items, places:Array.isArray(data.places)?data.places:[], stock:Array.isArray(data.stock)?data.stock:[],
+    ops:Array.isArray(data.ops)?data.ops:[],noPhotos:!!data.noPhotos };
 }
 
 /** Объединение: запись с большей датой изменения побеждает; ничего не удаляется. */
@@ -70,8 +111,8 @@ export function mergeItems(local: Item[], incoming: Item[]): { toWrite: Item[]; 
 }
 
 export async function exportBackup() {
-  const items = await db.items.toArray();
-  return JSON.stringify({ app: 'workshop-inventory', version: BACKUP_VERSION, exported: new Date().toISOString(), items });
+  const [items,places,stock,ops]=await Promise.all([db.items.toArray(),db.places.toArray(),db.stock.toArray(),db.ops.toArray()]);
+  return JSON.stringify({ app:'workshop-inventory',version:BACKUP_VERSION,exported:new Date().toISOString(),items,places,stock,ops });
 }
 
 // ---------- фото ----------
