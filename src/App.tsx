@@ -6,6 +6,7 @@ import { Html5Qrcode } from 'html5-qrcode';
 import Icon, {type IconName} from './Icon';
 import {StockList, StockForm, StockCard} from './Stock';
 import StoragePlaces from './Places';
+import QrSheet from './QrSheet';
 import { db, Item, CATEGORIES, newItem, resizeImage, itemUrl, parseQr, exportBackup, validateBackup, mergeItems, importBackup, ensureCats, placePath, type Place } from './db';
 
 let toastSet: (s: string) => void = () => {};
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="/edit/:id" element={<Form />} />
         <Route path="/scan" element={<Scan />} />
         <Route path="/qr" element={<QRStudio />} />
+        <Route path="/qr-sheet" element={<QrSheet />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Missing />} />
       </Routes>
@@ -323,7 +325,7 @@ function QRStudio() {
   return <>
     <div className="page-head">
       <div><h1>Создать QR-код</h1><p className="mut">Выберите предмет, скачайте код или распечатайте наклейку.</p></div>
-      <Link className="btn" to="/scan">▦ Сканировать QR</Link>
+      <div className="qr-actions"><Link className="btn" to="/scan">▦ Сканировать QR</Link><Link className="btn pri" to="/qr-sheet"><Icon name="printer" size={18}/> Печать нескольких QR</Link></div>
     </div>
     <div className="qr-layout">
       <div className="panel">
