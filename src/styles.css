@@ -93,3 +93,21 @@ body:before{background-image:radial-gradient(ellipse at 75% 0%,rgba(20,106,180,.
 .split-list,.split-card{min-width:0;max-height:calc(100vh - 52px);overflow:auto;scrollbar-width:thin;padding:0 4px}
 .split .card{margin:10px 0}
 @media(max-width:1120px){.split{display:block}.split.catalog-only .split-card{display:none}.split.with-card .split-list{display:none}.split-list,.split-card{max-height:none;overflow:visible}}
+
+/* Multi-label QR print */
+.qr-check{display:flex;align-items:center;gap:12px;padding:10px;border-bottom:1px solid var(--bd)}
+.qr-check input{width:22px;min-height:22px;margin:0}
+.qr-check span{flex:1}
+.qr-check small{color:var(--mut)}
+.sheet{display:flex;flex-wrap:wrap;gap:5px;padding:16px 0;align-items:start}
+.sheet .label{display:flex;flex-direction:column;justify-content:center;align-items:center;position:static;text-align:center;overflow:hidden;border:1px dashed #9ca3af;background:white;color:#0a1930;font-size:8pt;padding:1mm;box-sizing:border-box}
+.sheet .label img{width:76%;max-height:75%;object-fit:contain}
+.sheet .label div{max-width:100%;overflow:hidden;white-space:nowrap}
+@media print{
+ body *{visibility:hidden!important}
+ .label,.label *,.sheet,.sheet *{visibility:visible!important}
+ .sheet{display:flex!important;position:absolute;left:0;top:0;flex-wrap:wrap;gap:1mm;padding:0;background:white}
+ .sheet .label{display:flex!important;position:static!important;border:none!important;break-inside:avoid}
+ .sheet.roll{display:block!important}
+ .sheet.roll .label{break-after:page}
+}
