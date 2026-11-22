@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, ChangeEvent } from 'react';
+import { useEffect, useState, useRef, ChangeEvent, type ReactNode } from 'react';
 import { NavLink, Route, Routes, Link, useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import QRCode from 'qrcode';
@@ -58,7 +58,7 @@ export default function App() {
     <main className="content">
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/catalog" element={<Catalog />} />
+        <Route path="/catalog" element={<Split />} />
         <Route path="/warehouse" element={<StockList />} />
         <Route path="/stock" element={<StockList />} />
         <Route path="/stock/new" element={<StockForm />} />
@@ -68,7 +68,7 @@ export default function App() {
         <Route path="/history" element={<History />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/new" element={<Form />} />
-        <Route path="/i/:id" element={<Card />} />
+        <Route path="/i/:id" element={<Split><Card /></Split>} />
         <Route path="/edit/:id" element={<Form />} />
         <Route path="/scan" element={<Scan />} />
         <Route path="/qr" element={<QRStudio />} />
@@ -78,6 +78,10 @@ export default function App() {
     </main>
     {msg && <div className="toast" role="status">{msg}</div>}
   </div>;
+}
+
+function Split({children}:{children?:ReactNode}){
+ return <div className={'split '+(children?'with-card':'catalog-only')}><div className="split-list"><Catalog/></div><div className="split-card">{children||<div className="panel panel-body empty"><Icon name="drill" size={44}/><h3>Выберите предмет</h3><p>Откройте инструмент слева, чтобы просмотреть его карточку.</p></div>}</div></div>;
 }
 
 const live = () => useLiveQuery(() => db.items.filter(i => !i.deleted).toArray(), [], undefined as Item[] | undefined);
